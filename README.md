@@ -48,6 +48,8 @@ Packages all RTF or PDF files from a given folder into a single, bookmarked PDF 
 %TLF_Packager(input_path=E:\Study\Output\Listings, input_type=RTF, toc=Y, delete_pdfs=Y);
 %TLF_Packager(input_path=E:\Study\Output\Tables, input_type=PDF, toc=N);
 
+---
+
 # Python Scripts
 
 This toolkit includes Python scripts that drive the core automation for merging, bookmarking, and TOC generation.
@@ -67,6 +69,8 @@ This toolkit includes Python scripts that drive the core automation for merging,
   python pack_rtfs_with_toc.py "<input_folder_path>" "<output_file_name.pdf>" [TOC_TITLE:Y/N] [DELETE_PDFS:Y/N]
   DELETE_PDFS: Y deletes temporary PDFs after merging (default is Y, only applies to RTF input).
 
+---
+
 ### 2. `pack_pdfs_with_toc.py`
 
 - **Purpose:** 
@@ -80,28 +84,32 @@ Merges multiple PDF files in a folder, extracts section titles for bookmarks, an
 python pack_pdfs_with_toc.py "<input_folder_path>" "<output_file_name.pdf>" [TOC_TITLE:Y/N]
 TOC_TITLE: Y adds "Table of Contents" line at the top of the TOC, N omits it (default is Y).
 
-🗂️ How the Scripts Work
-Title Extraction:
-The scripts extract the first line containing Listing/Table/Figure (Title line 1), plus up to two subsequent lines, to use as PDF bookmark and TOC text.
 
-TOC Generation:
-The scripts automatically paginate the TOC and insert clickable links to each output section.
+---
 
-Bookmarks:
-Bookmarks are created at the beginning of each merged output for easy navigation.
+# 🗂️ How the Scripts Work
 
-File Handling:
-For RTF input, temporary PDFs are optionally deleted after merging.
+## Title Extraction
+- The scripts extract the first line containing Listing/Table/Figure (Title line 1), plus up to two subsequent lines.
+- This extracted text is used for both PDF bookmarks and Table of Contents (TOC) entries.
 
-💻 Requirements
-SAS (tested with SAS 9.4)
+## TOC Generation
+- The scripts automatically paginate the TOC based on content length.
+- Clickable links are inserted in the TOC, allowing direct navigation to each output section in the PDF.
 
-Python 3+ (with PyMuPDF installed: pip install pymupdf)
+## Bookmarks
+- Bookmarks are created at the beginning of each merged output, enabling quick navigation throughout the final PDF.
 
-LibreOffice (for RTF conversion; required by pack_rtfs_with_toc.py)
+## File Handling
+- For RTF input, temporary PDFs generated during conversion are optionally deleted after merging to save space and maintain folder cleanliness.
 
-OS: Windows or Mac (uses system commands)
+---
 
-Note:
-The macro and scripts are located under GLIB\macros\Unvalidated.
-Please ensure you take an SVN UPDATE to access the latest version.
+# 💻 Requirements
+
+- **SAS** (tested with SAS 9.4)
+- **Python 3+** (with [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/) installed: `pip install pymupdf`)
+- **LibreOffice** (for RTF conversion; required by `pack_rtfs_with_toc.py`)
+- **OS:** Windows or Mac (scripts use system calls for automation)
+
+---
