@@ -1,91 +1,124 @@
-/*****************************************************************************************************/
-/* Macro Name     : TLF_Packager                                                                     */
-/*                                                                                                   */
-/* Purpose        : Packages RTF or PDF files in a given folder into a single PDF with bookmarks and */
-/*                  an optional clickable Table of Contents (TOC), using Python scripts.             */
-/*                                                                                                   */
-/* Author         : Manivannan Mathialagan                                                           */
-/* Created On     : 19-May-2025                                                                      */
-/*                                                                                                   */
-/* Parameters                                                                                        */
-/*   - input_path   (Required) : Path to the folder containing RTF or PDF files.                     */
-/*   - input_type   (Required) : RTF or PDF.                                                         */
-/*   - toc          (Optional) : Y/N flag to indicate if TOC should be added. Default is Y.          */
-/*   - delete_pdfs  (Optional) : Y/N flag to delete intermediate PDFs after merge (RTF only).        */
-/*                                                                                                   */
-/* Example Usage                                                                                     */
-/*   %TLF_Packager(input_path=E:\Study\Output\Listings, input_type=RTF, toc=Y, delete_pdfs=Y);       */
-/*   %TLF_Packager(input_path=E:\Study\Output\Tables, input_type=PDF, toc=Y);                        */
-/*                                                                                                   */
-/* Notes                                                                                             */
-/*   - Python must be installed and accessible via system PATH or specified directly.                */
-/*   - Python scripts `pack_rtfs_with_toc.py` and `pack_pdfs_with_toc.py` must be in &glibroot path. */
-/*   - Uses `filename ... pipe` to stream Python output directly into the SAS log.                   */
-/*****************************************************************************************************/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Macro Name:    TLF_Packager.sas                                                                 ***/
+/***                                                                                                 ***/
+/*** Purpose:       Packages all RTF and PDF files from a specified folder into a single,            ***/
+/***                bookmarked PDF with a clickable Table of Contents (TOC).                         ***/
+/***                Utilizes the Python script TLF_Packager.py for all core operations.              ***/
+/***                RTF-to-PDF conversion is controlled per file in Excel ("Converter" column):      ***/
+/***                  - Use Microsoft Word for files marked "WORD"                                   ***/
+/***                  - Use LibreOffice for files marked "LIBREOFFICE"                               ***/
+/***                The default converter (for all RTFs) can be specified via macro argument.        ***/
+/***                Supports user-driven review and approval of bookmarks/order via Excel.           ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Programmed By: Manivannan Mathialagan                                                           ***/
+/***                                                                                                 ***/
+/*** Created On:    22-May-2025                                                                      ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Parameters:                                                                                     ***/
+/***                                                                                                 ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Name           | Description                                 | Default value   | Required       ***/
+/***----------------|---------------------------------------------|-----------------|----------------***/
+/*** input_path     | Path to folder containing RTF and/or PDF    |   None          |    Yes         ***/
+/***                | files to be packaged.                       |                 |                ***/
+/***----------------|---------------------------------------------|-----------------|----------------***/
+/*** delete_pdfs    | Y/N flag: delete PDFs converted from RTFs   |   Y             |    No          ***/
+/***                | after merging.                              |                 |                ***/
+/***----------------|---------------------------------------------|-----------------|----------------***/
+/*** default_conv   | LIBREOFFICE/WORD: Default converter         |   WORD          |    No          ***/
+/***                | for all RTFs. User can override in Excel.   |                 |                ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Output(s):                                                                                      ***/
+/***                                                                                                 ***/
+/***   - PDF:      Single merged PDF with bookmarks and clickable TOC, placed in the input folder.   ***/
+/***   - Excel:    Worksheet for user review/approval of bookmark titles, order, and converter.      ***/
+/***   - Log:      TXT log file streaming all Python output for audit/troubleshooting.               ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Macro Variables:    None                                                                        ***/
+/*** Data sets:          None                                                                        ***/
+/*** Variables:          None                                                                        ***/
+/*** Other Files:        Dynamically named PDF, Excel, and TXT log files in input folder.            ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Dependencies:                                                                                   ***/
+/***                                                                                                 ***/
+/*** - Python 3 (with openpyxl, PyMuPDF, pywin32 installed)                                          ***/
+/*** - LibreOffice (for RTF-to-PDF conversion)                                                       ***/
+/*** - Microsoft Word (for RTF-to-PDF conversion)                                                    ***/
+/*** - TLF_Packager.py script in &glibroot\Unvalidated\                                              ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Example Usage:                                                                                  ***/
+/***                                                                                                 ***/
+/*** %TLF_Packager(input_path=E:\Study\Output\Listings);                                             ***/
+/*** %TLF_Packager(input_path=E:\Study\Output\Tables, delete_pdfs=N, default_conv=WORD);             ***/
+/***-------------------------------------------------------------------------------------------------***/
+/*** Notes:                                                                                          ***/
+/***                                                                                                 ***/
+/***   1. The Python script creates an Excel worksheet listing all files, their titles/bookmarks,    ***/
+/***      and a "Converter" column.                                                                  ***/
+/***      User may change converter for any RTF (dropdown: WORD/LIBREOFFICE)                         ***/
+/***   2. Macro passes default_conv value to Python to pre-fill Excel.                               ***/
+/***   3. After Excel review, merging and conversion proceed as indicated in worksheet.              ***/
+/***   4. Both LibreOffice and Word must be installed and accessible for full function.              ***/
+/***-------------------------------------------------------------------------------------------------***/
 
-%macro TLF_Packager(input_path=, input_type=, toc=Y, delete_pdfs=Y);
+%macro TLF_Packager(input_path=, delete_pdfs=Y, default_conv=WORD);
 
-  %local script output base folder_name ts logfile pycmd shellcmd;
+    %local scriptpath pyexe ts base folder_name output_pdf logfile batfile;
 
-  /* Generate timestamp */
-  %let __ST = %sysfunc(datetime());
-  data _null_;
-    st = &__ST;
-    datestr = put(datepart(st), yymmddn8.);
-    timestr = put(timepart(st), tod8.);
-    ts_clean = cats(datestr, '_T', compress(timestr, ':'));
-    call symputx('ts', ts_clean);
-  run;
+    /* Path to Python script and executable Python file */
+    %let scriptpath=&glibroot\Unvalidated\TLF_Packager\TLF_Packager.py;
+    %let pyexe=D:\Python\Python37\python.exe;
 
-  %put [INFO] Timestamp generated: &ts;
+    /* Generate timestamp as a macro variable for uniqueness */
+    %let __ST = %sysfunc(datetime());
+    data _null_;
+        st = &__ST;
+        datestr = put(datepart(st), yymmddn8.);
+        timestr = put(timepart(st), tod8.);
+        ts_clean = cats(datestr, '_T', compress(timestr, ':'));
+        call symputx('ts', ts_clean);
+    run;
 
-  /* Detect folder type for output name prefix */
-  %let folder_name = %scan(%sysfunc(reverse(%sysfunc(scan(%sysfunc(reverse(&input_path)),1,"\")))),1," ");
-  %if %index(%upcase(&folder_name), TABLE) %then %let base = Tables;
-  %else %if %index(%upcase(&folder_name), LISTING) %then %let base = Listings;
-  %else %if %index(%upcase(&folder_name), FIGURE) %then %let base = Figures;
-  %else %let base = TLFs;
+    /* Set base name for output files (customize as needed) */
+    %let folder_name = %scan(%sysfunc(reverse(%sysfunc(scan(%sysfunc(reverse(&input_path)),1,"\")))),1," ");
+    %if %index(%upcase(&folder_name), TABLE) %then %let base = Tables;
+    %else %if %index(%upcase(&folder_name), LISTING) %then %let base = Listings;
+    %else %if %index(%upcase(&folder_name), FIGURE) %then %let base = Figures;
+    %else %let base = TLFs;
 
-  %let output = &base._&ts..pdf;
-  %let logfile = &input_path.\log_&base._&ts..txt;
+    %let batfile = &input_path.\run_tlf_packager_&ts..bat;
+    %let logfile = &input_path.\log_&base._&ts..txt;
+    %let output_pdf = &base._&ts..pdf;
 
-  /* Determine script to use */
-  %let input_type = %upcase(&input_type);
-  %if &input_type = RTF %then %let script = pack_rtfs_with_toc.py;
-  %else %if &input_type = PDF %then %let script = pack_pdfs_with_toc.py;
-  %else %do;
-    %put ERROR: input_type must be RTF or PDF.;
-    %return;
-  %end;
+    %put NOTE: BATFILE: &batfile LOGFILE: &logfile SCRIPTPATH: &scriptpath PYEXE: &pyexe OUTPUT_PDF: &output_pdf;
 
-  /* Build Python execution command */
-  %if &input_type = RTF %then %do;
-    %let pycmd = D:\Python\Python37\python &glibroot\Unvalidated\&script.
-                   "&input_path." "&input_path.\&output." &toc &delete_pdfs;
-  %end;
-  %else %do; /* PDF */
-    %let pycmd = D:\Python\Python37\python &glibroot\Unvalidated\&script.
-                   "&input_path." "&input_path.\&output." &toc;
-  %end;
+     /* Generate BAT file with resolved macro values */
+    data _null_;
+        file "&batfile.";
+        put '@echo off';
+        put 
+          '"' "&pyexe." '" ' 
+          '"' "&scriptpath." '" '
+          '"' "&input_path." '" '
+          '"' "&output_pdf." '" '
+          '"' "&delete_pdfs." '" '
+          '"' "&default_conv." '" '
+          '> "' "&logfile." '" 2>&1';
+    run;
 
-  /* Construct shell command with output redirection */
-  %let shellcmd = %sysfunc(quote(&pycmd. > "&logfile." 2>&1));
+    /* Execute BAT file */
+    options noxwait;
+    X """&batfile.""";
 
-  /* Pipe the execution and capture the log in SAS */
-  filename pycall pipe &shellcmd;
+    /* Optional: Clean up BAT file afterwards */
+    X "del ""&batfile."" ";
 
-  data _null_;
-    infile pycall;
-    input;
-    putlog "[Python] " _infile_;
-  run;
-
-  %put NOTE: Log saved to &logfile.;
-  %put NOTE: Output PDF: &output.;
+    %put NOTE: Log saved to &logfile. Output PDF: &output_pdf.;
 
 %mend;
 
-/* Example call:
-%TLF_Packager(input_path=E:\Projects\Bristol Myers Squibb\KarXT Kar-012\Output\Draft 1 TLFs\tables_v20250508_d20250516, input_type=RTF);
-%TLF_Packager(input_path=E:\Projects\Bristol Myers Squibb\KarXT Kar-012\Output\Draft 1 TLFs\Check\tables_v20241014_d20250516, input_type=PDF);
+/* Example usage:
+%TLF_Packager(input_path=E:\Projects\Bristol Myers Squibb\KarXT Kar-012\Output\Draft 1 TLFs\Check\tables_v20241014_d20250516);
+%TLF_Packager(input_path=E:\Projects\Bristol Myers Squibb\KarXT Kar-012\Output\Draft 1 TLFs\Check\both files, delete_pdfs=N);
 */
+
