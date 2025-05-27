@@ -23,7 +23,8 @@
 #   python TLF_Packager.py "input_folder_path" "output_file_name.pdf" Y WORD
 #
 # Notes
-#   - Requires Python 3, openpyxl, PyMuPDF, pywin32 (pip install openpyxl pymupdf pywin32)
+#   - Requires Python 3, openpyxl, PyMuPDF, pywin32 python-docx 
+#       (pip install openpyxl pymupdf pywin32 python-docx)
 #   - Requires LibreOffice at D:\LibreOffice\program\soffice.exe for non-Word conversion
 #   - Requires Microsoft Word (with pywin32) installed for "WORD" conversion
 # ****************************************************************************************************
@@ -33,7 +34,8 @@ import re
 import sys
 import subprocess
 import fitz  # PyMuPDF for PDF manipulation
-import openpyxl
+import openpyxl # openpyxl for Excel reading/writing 
+import docx  # for DOCX support
 from openpyxl import Workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -48,10 +50,9 @@ def banner(msg):
 def print_header():
     print("=" * 100)
     print("TLF Packager - Automated TLF Packaging and Bookmarking Tool")
-    print("Author: Manivannan Mathialagan")
-    print("Note: RTF-to-PDF conversion per file is controlled by the Converter column in Excel.")
-    print("=" * 100)
     print("")
+    print("Author: Manivannan Mathialagan")
+    print("=" * 100) 
 
 def extract_groups_from_rtf_header(rtf_text):
     header_match = re.search(r'(\\header[lr]?)(.+?)(\\sectd|$)', rtf_text, re.DOTALL)
@@ -280,6 +281,105 @@ def extract_title_from_pdf(pdf_path):
     except Exception:
         return "", "", "", os.path.basename(pdf_path)
 
+def extract_title_from_docx(docx_path):
+    title_pattern = r'^(Listing|Table|Figure|Appendix)\s+\d+(?:\.\d+)*[A-Za-z0-9]*'
+    try:
+        doc = docx.Document(docx_path)
+        paras = []
+        # 1. Try to get header paragraphs from all sections
+        for section in doc.sections:
+            for h_para in section.header.paragraphs:
+                line = h_para.text.strip()
+                if line:
+                    paras.append(line)
+        print(f"\nFile: {os.path.basename(docx_path)} [DOCX] - Header Preview")
+        for i, line in enumerate(paras[:10]):
+            print(f"  Header Line {i+1}: '{line}'")
+        # 2. Try finding the title in the header
+        title1 = title2 = title3 = ""
+        for idx, line in enumerate(paras[:10]):
+            match = re.match(title_pattern, line, re.IGNORECASE)
+            if match:
+                title1 = match.group().strip()
+                remainder = line[len(match.group()):].strip(" :–-")
+                remainder = filter_note_from_line(remainder)
+                print(f"Found Title 1 in header line {idx+1}: '{title1}'")
+                if remainder and valid_title_candidate(remainder):
+                    title2 = remainder
+                    print(f"Found Title 2 (header same line): '{title2}'")
+                if not title2 and idx+1 < len(paras):
+                    cand2 = paras[idx+1]
+                    if valid_title_candidate(cand2):
+                        title2 = cand2
+                        print(f"Found Title 2 (header next line): '{title2}'")
+                if idx+2 < len(paras):
+                    cand3 = paras[idx+2]
+                    if valid_title_candidate(cand3):
+                        title3 = cand3
+                        print(f"Found Title 3 (header): '{title3}'")
+                break
+        # 3. If not found in header, look in document body and tables
+        if not title1:
+            body_paras = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+            # Add text from table cells as well
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        cell_text = cell.text.strip()
+                        if cell_text:
+                            body_paras.append(cell_text)
+            print(f"\nFile: {os.path.basename(docx_path)} [DOCX] - Body/Table Preview")
+            for i, line in enumerate(body_paras[:10]):
+                print(f"  Body Line {i+1}: '{line}'")
+            for idx, line in enumerate(body_paras[:15]):
+                match = re.match(title_pattern, line, re.IGNORECASE)
+                if match:
+                    title1 = match.group().strip()
+                    remainder = line[len(match.group()):].strip(" :–-")
+                    remainder = filter_note_from_line(remainder)
+                    print(f"Found Title 1 in body line {idx+1}: '{title1}'")
+                    if remainder and valid_title_candidate(remainder):
+                        title2 = remainder
+                        print(f"Found Title 2 (body same line): '{title2}'")
+                    if not title2 and idx+1 < len(body_paras):
+                        cand2 = body_paras[idx+1]
+                        if valid_title_candidate(cand2):
+                            title2 = cand2
+                            print(f"Found Title 2 (body next line): '{title2}'")
+                    if idx+2 < len(body_paras):
+                        cand3 = body_paras[idx+2]
+                        if valid_title_candidate(cand3):
+                            title3 = cand3
+                            print(f"Found Title 3 (body): '{title3}'")
+                    break
+            # 4. If STILL not found, fallback to first 3 valid lines in header + body
+            if not title1:
+                print(f"\nFile: {os.path.basename(docx_path)} [DOCX] - Fallback mode")
+                all_lines = paras + body_paras
+                found_lines = 0
+                for line in all_lines[:15]:
+                    if valid_title_candidate(line):
+                        found_lines += 1
+                        if not title1:
+                            print(f"Fallback Title 1: '{line}'")
+                            title1 = filter_note_from_line(line)
+                        elif not title2:
+                            print(f"Fallback Title 2: '{line}'")
+                            title2 = filter_note_from_line(line)
+                        elif not title3:
+                            print(f"Fallback Title 3: '{line}'")
+                            title3 = filter_note_from_line(line)
+                        if found_lines == 3:
+                            break
+        bookmark = title1
+        if title2: bookmark += ": " + title2
+        if title3: bookmark += " - " + title3
+        if not bookmark.strip():
+            bookmark = os.path.basename(docx_path)
+        return title1, title2, title3, bookmark
+    except Exception as e:
+        print(f"Error reading {docx_path}: {e}")
+        return "", "", "", os.path.basename(docx_path)
 
 def parse_sort_key(bookmark):
     order = {"table": 0, "listing": 1, "figure": 2}
@@ -422,6 +522,38 @@ def convert_rtf_to_pdf(rtf_path, output_folder, title1=None, converter='LIBREOFF
             print(f"[LibreOffice Converted] {os.path.basename(rtf_path)}")
         return pdf_path
 
+def convert_docx_to_pdf_word(docx_path, output_folder):
+    import win32com.client
+    import time
+    pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
+    pdf_path = os.path.join(output_folder, os.path.basename(pdf_path))
+    word = win32com.client.Dispatch('Word.Application')
+    word.Visible = False
+    try:
+        doc = word.Documents.Open(os.path.abspath(docx_path))
+        doc.SaveAs(os.path.abspath(pdf_path), FileFormat=17)  # PDF format
+        doc.Close(False)
+        time.sleep(0.5)
+    except Exception as e:
+        print(f"[Word] Error converting {docx_path}: {e}")
+    finally:
+        word.Quit()
+    print(f"[Word Converted] {os.path.basename(docx_path)}")
+    return pdf_path
+
+def convert_docx_to_pdf(docx_path, output_folder, converter='LIBREOFFICE'):
+    pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
+    if converter.upper() == 'WORD':
+        return convert_docx_to_pdf_word(docx_path, output_folder)
+    else:
+        if not os.path.exists(pdf_path):
+            subprocess.run([
+                soffice_path, "--headless", "--convert-to", "pdf", docx_path,
+                "--outdir", output_folder
+            ], check=True)
+            print(f"[LibreOffice Converted] {os.path.basename(docx_path)}")
+        return pdf_path
+
 def merge_pdfs_with_bookmarks(entries, output_path, delete_intermediate=False):
     banner("STEP 4: Bookmark Creation, Merging, and PDF Generation")
     merged = fitz.open()
@@ -433,6 +565,10 @@ def merge_pdfs_with_bookmarks(entries, output_path, delete_intermediate=False):
         if entry['type'] == 'RTF':
             converter = entry.get('converter', 'LIBREOFFICE')
             pdf_path = convert_rtf_to_pdf(entry['file'], os.path.dirname(entry['file']), entry['title1'], converter)
+            to_delete.append(pdf_path)
+        elif entry['type'] == 'DOCX':
+            converter = entry.get('converter', 'LIBREOFFICE')
+            pdf_path = convert_docx_to_pdf(entry['file'], os.path.dirname(entry['file']), converter)
             to_delete.append(pdf_path)
         else:
             pdf_path = entry['file']
@@ -446,7 +582,7 @@ def merge_pdfs_with_bookmarks(entries, output_path, delete_intermediate=False):
     merged.save(output_path)
     print(f"\n[Step 4] Final merged PDF with bookmarks: {output_path}")
     if delete_intermediate:
-        print("\nCleaning up PDFs generated from RTFs:")
+        print("\nCleaning up PDFs generated from RTFs/DOCXs:")
         for pdf in to_delete:
             if os.path.exists(pdf):
                 os.remove(pdf)
@@ -593,8 +729,9 @@ def main(folder, output_pdf_name="TLFs.pdf", delete_intermediate_pdfs=False, def
 
     rtf_files = sorted(f for f in os.listdir(folder) if f.lower().endswith('.rtf') and not f.startswith('~$'))
     pdf_files = sorted(f for f in os.listdir(folder) if f.lower().endswith('.pdf') and not f.startswith('~$'))
+    docx_files = sorted(f for f in os.listdir(folder) if f.lower().endswith('.docx') and not f.startswith('~$'))
 
-    print(f"Found {len(rtf_files)} RTF files and {len(pdf_files)} PDF files.")
+    print(f"Found {len(rtf_files)} RTF files, {len(pdf_files)} PDF files, and {len(docx_files)} DOCX files.")
 
     print("\n--- Listing all RTF files below ---")
     if rtf_files:
@@ -604,6 +741,11 @@ def main(folder, output_pdf_name="TLFs.pdf", delete_intermediate_pdfs=False, def
     print("\n--- Listing all PDF files below ---")
     if pdf_files:
         for f in pdf_files:
+            print(f"   - {f}")
+
+    print("\n--- Listing all DOCX files below ---")
+    if docx_files:
+        for f in docx_files:
             print(f"   - {f}")
 
     print("\n\nTitle checking starts\n")
@@ -617,6 +759,10 @@ def main(folder, output_pdf_name="TLFs.pdf", delete_intermediate_pdfs=False, def
         pdf_path = os.path.join(folder, pdf)
         title1, title2, title3, bookmark = extract_title_from_pdf(pdf_path)
         entries.append({'type': 'PDF', 'file': pdf_path, 'title1': title1, 'title2': title2, 'title3': title3, 'bookmark': bookmark})
+    for docx_file in docx_files:
+        docx_path = os.path.join(folder, docx_file)
+        title1, title2, title3, bookmark = extract_title_from_docx(docx_path)
+        entries.append({'type': 'DOCX', 'file': docx_path, 'title1': title1, 'title2': title2, 'title3': title3, 'bookmark': bookmark})
 
     print("\nTitle checking ends\n")
 
