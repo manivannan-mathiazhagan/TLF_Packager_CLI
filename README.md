@@ -107,4 +107,95 @@ TLF_Packager.py automates the end-to-end packaging of clinical Tables, Listings,
 ## Temporary File Handling
 - PDFs generated from RTFs during conversion are automatically deleted after merging (if selected), keeping the working folder clean.
 
+# TLF Packager
+
+The **TLF Packager** is a Python and SAS-integrated automation tool designed to streamline the process of packaging Tables, Listings, Figures, and Appendices for clinical study reports. It supports RTF, PDF, and DOCX files and generates a single bookmarked PDF with a clickable Table of Contents (TOC), allowing user-defined ordering and customization via Excel.
+
+---
+
+## Evolution Summary
+
+### 1. Initial Phase: Separate Scripts
+- Separate scripts for PDF and RTF.
+- No unified handling or ordering.
+- Bookmarks generated directly from extracted titles.
+
+### 2. Unified Packager Script Introduced
+- Combines RTF and PDF logic into a single script.
+- Folder-based scanning.
+- Title extraction and bookmark merging into one PDF.
+
+### 3. Intermediate Excel Output Introduced
+- Excel shows file details, titles, bookmark names, and order.
+- Allows review and customization.
+
+### 4. Confirmation and Popup Control
+- Tkinter popup prompts for user confirmation after Excel edit.
+
+### 5. DOCX Format Support Added
+- DOCX titles extracted using `python-docx`.
+- DOCX converted using MS Word automation.
+
+### 6. Converter Method Customization
+- Excel column `Converter` allows:
+  - `WORD` – Microsoft Word
+  - `LIBREOFFICE` – LibreOffice
+
+### 7. Title Validation Logic Improved
+- Validates based on keywords: Table, Listing, Figure, Appendix.
+- Skips invalid/blank titles with logging.
+
+### 8. Appendix Sorting Logic
+- Appendices placed last in final PDF.
+- Maintains separate hierarchy in bookmarks.
+
+### 9. Alignment-Based RTF Title Extraction
+- Extracts up to 3 center-aligned lines for title.
+- Non-centered lines skipped.
+
+### 10. Enhanced TOC and Bookmark Features
+- TOC auto-generated and inserted as the first page.
+- Reflects titles and Excel order.
+
+### 11. Cleanup and Logging Enhancements
+- Deletes temp files optionally.
+- Logs steps, conversions, and errors.
+
+### 12. SAS Integration via Macro
+- SAS macro wraps the script.
+- Parameters: `input_path`, `output_pdf`, `delete_flag`.
+- Uses X command/PIPE to execute Python.
+
+### 13. Packaging Improvements
+- Final output includes:
+  - Bookmarked PDF
+  - Excel metadata file
+  - Optional ZIP bundle
+
+---
+
+## Planned Enhancements
+
+| Feature                        | Description |
+|-------------------------------|-------------|
+| Clickable TOC Links           | Direct PDF links from TOC to content |
+| Section Headers/Grouping      | Group entries (e.g., Tables, Listings) |
+| Preview Mode                  | Generate Excel metadata without merging |
+| Hyperlinked Annotations       | Add internal page reference hyperlinks |
+| Dynamic Bookmark Styling      | Customize fonts and levels |
+| Error Recovery and Skipping   | Continue on failure, log errors |
+| Command-Line Utility          | CLI with help, argument parsing |
+
+---
+
+## License
+
+Distributed internally at Veristat. External use subject to licensing policy.
+
+---
+
+## Author
+
+**Manivannan Mathialagan**  
+Associate Manager – Statistical Programming  
 ---
