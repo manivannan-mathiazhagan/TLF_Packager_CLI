@@ -7,7 +7,7 @@ Seamlessly combines SAS macros and Python scripts for an efficient, consistent w
 
 ## 🧩 Key Features
 
-- **Unified Packaging:** Combines both RTF and PDF outputs into a single, bookmarked PDF.
+- **Unified Packaging:** Combines RTF, PDF, and DOCX outputs into a single, bookmarked PDF.
 
 - **Automated Table of Contents:** Generates a fully clickable TOC for easy navigation within the merged PDF.
 
@@ -26,25 +26,25 @@ Seamlessly combines SAS macros and Python scripts for an efficient, consistent w
 
 ###  `TLF_Packager.sas`
 
-Packages all RTF and/or PDF files from a given folder into a single, bookmarked PDF with an optional TOC, leveraging Python for content extraction and PDF merging.
+Packages all RTF, PDF, and DOCX files from a given folder into a single, bookmarked PDF with an optional Table of Contents (TOC), leveraging Python for content extraction and PDF merging.
 
 **Features:**
-- Detects input type (**RTF/PDF**) and processes accordingly.
+- Detects input type (**RTF**, **PDF**, or **DOCX**) and processes each accordingly.
 - Dynamically extracts the first three lines (including **Listing/Table/Figure**) for use as bookmark text.
-- Can delete temporary PDFs after merge (for **RTF** input).
-- **WORD/LIBREOFFICE** Conversion for **RTF** to **PDF** based on user input.
+- Can delete temporary PDFs after merge (for **RTF** and **DOCX** input).
+- **WORD/LIBREOFFICE** Conversion for **RTF** and **DOCX** to **PDF** based on user input.
 - Output **PDF** is auto-named by folder and timestamp.
 
 **Input Requirements:**
-- Folder containing TLFs as **RTF** and/or **PDF** files.
+- Folder containing TLFs as **RTF**, **PDF**, or **DOCX** files.
 ---
 
 ### Macro Parameters
 
 | **Parameter**     | **Required** | **Default** | **Description**                                                                    |
 |-------------------|--------------|-------------|------------------------------------------------------------------------------------|
-| `input_path`      | ✅ Yes       | —           | Path to the folder containing RTF and/or PDF files.                                    |
-| `delete_pdfs`     | ❌ No        | `Y`         | Y/N flag to delete intermediate PDFs (for RTF input only).                         |
+| `input_path`      | ✅ Yes       | —           | Path to the folder containing RTF, PDF, and/or DOCX files.                         |
+| `delete_pdfs`     | ❌ No        | `Y`         | Y/N flag to delete intermediate PDFs (for RTF and DOCX input only).                         |
 | `default_conv`             | ❌ No        | `WORD`         |LIBREOFFICE/WORD: Default converter for all RTFs. User can override in Excel.|
 
 ---
@@ -63,13 +63,14 @@ This toolkit includes a Python script that drive the core automation for merging
 ###  `TLF_Packager.py`
 
 - **Purpose:**  
-TLF_Packager.py automates the end-to-end packaging of clinical Tables, Listings, and Figures (TLFs) by merging RTF and PDF outputs into a single, bookmarked **PDF** with a clickable Table of Contents (TOC). The script enables users to review, reorder, and customize section bookmarks via Excel, and select the desired RTF-to-PDF conversion method (Microsoft Word or LibreOffice) for each output, streamlining and standardizing the TLF delivery process.
+TLF_Packager.py automates the end-to-end packaging of clinical Tables, Listings, and Figures (TLFs) by merging **RTF**, **PDF**, and **DOCX** outputs into a single, bookmarked PDF with a clickable Table of Contents (TOC). The script enables users to review, reorder, and customize section bookmarks via Excel, and select the desired conversion method (Microsoft Word or LibreOffice) for each **RTF** or **DOCX** output, streamlining and standardizing the TLF delivery process.
 
 - **Requirements:**
   - Python 3+
   - [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/) (`pip install pymupdf`)
   - [Openpyxl](https://openpyxl.readthedocs.io/en/stable/) (`pip install openpyxl`)
   - [Pywin32](https://pypi.org/project/pywin32/) (`pip install pywin32`)
+  - [python-docx](https://python-docx.readthedocs.io/en/latest/) (`pip install python-docx`)
   - [LibreOffice](https://www.libreoffice.org/download/download/) (for RTF to PDF conversion)
   - Microsoft Word 
 
